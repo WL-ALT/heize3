@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌠 手机流星雨模拟 🌠</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: linear-gradient(to bottom, #0a0a2a, #000033, #000000);
+            overflow: hidden; 
+            touch-action: none;
+            font-family: 'Arial', sans-serif;
+            height: 100vh;
+        }
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .info {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: white;
+            z-index: 10;
+            pointer-events: none;
+        }
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #4a90e2;
+        }
+        .instructions {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            z-index: 10;
+        }
+        button {
+            background: rgba(30, 60, 150, 0.7);
+            border: none;
+            border-radius: 20px;
+            color: white;
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(74, 144, 226, 0.5);
+            transition: all 0.3s;
+        }
+        button:active {
+            transform: scale(0.95);
+            background: rgba(50, 100, 200, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="info">
+            <h1>🌠 梦幻流星雨 🌠</h1>
+            <p class="instructions">点击或触摸屏幕召唤流星</p >
+        </div>
+        <canvas id="meteorCanvas"></canvas>
+        <div class="controls">
+            <button id="autoBtn">自动模式</button>
+            <button id="clearBtn">清除流星</button>
+        </div>
+    </div>
+
+    <script>
+        // 初始化Canvas
+        const canvas = document.getElementById('meteorCanvas');
+        const ctx = canvas.getContext('2d');
+        let meteors = [];
+        let stars = [];
+        let autoMode = true;
+        
+        // 设置Canvas尺寸
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initStars();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // 初始化星星背景
+        function initStars() {
+            stars = [];
+            const starCount = Math.min(200, (canvas.width * canvas.height) / 1000);
+            
+            for (let i = 0; i < starCount; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 1.5 + 0.5,
+                    brightness: Math.random() * 0.8 + 0.2,
+                    twinkleSpeed: Math.random() * 0.05 + 0.01,
+                    twinkleOffset: Math.random() * Math.PI * 2
+                });
+            }
+        }
+        
+        // 流星类
+        class Meteor {
+            constructor(targetX, targetY) {
+                // 流星起始位置（从屏幕外随机位置开始）
+                const side = Math.floor(Math.random() * 4); // 0:上, 1:右, 2:下, 3:左
+                switch(side) {
+                    case 0: // 上边
+                        this.x = Math.random() * canvas.width;
+                        this.y = -20;
+                        break;
+                    case 1: // 右边
+                        this.x = canvas.width + 20;
+                        this.y = Math.random() * canvas.height;
+                        break;
+                    case 2: // 下边
+                        this.x = Math.random() * canvas.width;
+                        this.y = canvas.height + 20;
+                        break;
+                    case 3: // 左边
+                        this.x = -20;
+                        this.y = Math.random() * canvas.height;
+                        break;
+                }
+                
+                this.targetX = targetX;
+                this.targetY = targetY;
+                
+                // 流星颜色（蓝色/青色/白色系）
+                const colors = ['#4a90e2', '#5dadec', '#7fbfff', '#a6d8ff', '#ffffff'];
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+                
+                // 计算速度和方向
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                this.speed = 8 + Math.random() * 4;
+                this.vx = (dx / distance) * this.speed;
+                this.vy = (dy / distance) * this.speed;
+                
+                // 流星尾迹
+                this.trail = [];
+                this.trailLength = 15 + Math.floor(Math.random() * 10);
+                this.size = Math.random() * 2 + 1;
+                
+                // 流星状态
+                this.active = true;
+            }
+            
+            update() {
+                if (!this.active) return;
+                
+                // 更新位置
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // 添加尾迹点
+                this.trail.push({x: this.x, y: this.y});
+                if (this.trail.length > this.trailLength) {
+                    this.trail.shift();
+                }
+                
+                // 检查是否到达目标区域或超出屏幕
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < 10 || 
+                    this.x < -50 || this.x > canvas.width + 50 || 
+                    this.y < -50 || this.y > canvas.height + 50) {
+                    this.active = false;
+                }
+            }
+            
+            draw() {
+                if (!this.active) return;
+                
+                // 绘制流星尾迹
+                for (let i = 0; i < this.trail.length; i++) {
+                    const point = this.trail[i];
+                    const progress = i / this.trail.length;
+                    const alpha = progress * 0.8;
+                    const size = this.size * progress;
+                    
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    
+                    // 创建尾迹渐变
+                    const gradient = ctx.createRadialGradient(
+                        point.x, point.y, 0,
+                        point.x, point.y, size * 3
+                    );
+                    gradient.addColorStop(0, this.color);
+                    gradient.addColorStop(1, 'transparent');
+                    
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, size * 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 绘制流星核心
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.restore();
+                }
+                
+                // 绘制流星头部（最亮的部分）
+                ctx.save();
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 头部光晕
+                const gradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, this.size * 4
+                );
+                gradient.addColorStop(0, this.color + 'CC');
+                gradient.addColorStop(1, 'transparent');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+            
+            isDone() {
+                return !this.active;
+            }
+        }
+        
+        // 绘制星星背景
+        function drawStars() {
+            const time = Date.now() * 0.001;
+            
+            stars.forEach(star => {
+                // 星星闪烁效果
+                const twinkle = Math.sin(time * star.twinkleSpeed + star.twinkleOffset) * 0.3 + 0.7;
+                const brightness = star.brightness * twinkle;
+                
+                ctx.save();
+                ctx.globalAlpha = brightness;
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+        
+        // 添加流星
+        function addMeteor(x, y) {
+            meteors.push(new Meteor(x, y));
+        }
+        
+        // 添加随机流星
+        function addRandomMeteor() {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            addMeteor(x, y);
+        }
+        
+        // 清除所有流星
+        function clearMeteors() {
+            meteors = [];
+        }
+        
+        // 切换自动模式
+        function toggleAutoMode() {
+            autoMode = !autoMode;
+            document.getElementById('autoBtn').textContent = autoMode ? '停止自动' : '自动模式';
+        }
+        
+        // 事件监听
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            addMeteor(x, y);
+        });
+        
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const x = e.touches[0].clientX - rect.left;
+            const y = e.touches[0].clientY - rect.top;
+            addMeteor(x, y);
+        });
+        
+        // 控制按钮事件
+        document.getElementById('autoBtn').addEventListener('click', toggleAutoMode);
+        document.getElementById('clearBtn').addEventListener('click', clearMeteors);
+        
+        // 动画循环
+        function animate() {
+            // 使用半透明填充创建拖尾效果
+            ctx.fillStyle = 'rgba(10, 10, 30, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制星星
+            drawStars();
+            
+            // 更新和绘制流星
+            meteors.forEach(meteor => {
+                meteor.update();
+                meteor.draw();
+            });
+            
+            // 移除完成的流星
+            meteors = meteors.filter(meteor => !meteor.isDone());
+            
+            // 自动模式
+            if (autoMode && Math.random() < 0.02) {
+                addRandomMeteor();
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // 启动动画
+        animate();
+        
+        // 添加初始流星
+        setTimeout(() => {
+            for (let i = 0; i < 2; i++) {
+                setTimeout(addRandomMeteor, i * 1000);
+            }
+        }, 500);
+    </script>
+</body>
+</html>
